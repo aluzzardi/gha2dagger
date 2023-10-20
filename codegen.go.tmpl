@@ -1,0 +1,62 @@
+package main
+
+import (
+	"context"
+    "errors"
+)
+
+{{ .Spec.Description | Comment }}
+func (d *Directory) {{ .Name | FormatName }}(ctx context.Context) (*{{ .Name | FormatName }}, error) {
+    return &{{ .Name | FormatName }}{
+        Workdir: d,
+    }, nil
+}
+
+{{ .Spec.Description | Comment }}
+type {{ .Name | FormatName }} struct {
+    // Action workdir
+    Workdir *Directory
+
+	{{- range $inputName, $inputSpec := .Spec.Inputs }}
+	{{ $inputSpec.Description | Comment }}
+    {{ $inputName | FormatName }} string
+    {{ end }}
+}
+
+{{- range $inputName, $inputSpec := .Spec.Inputs }}
+{{ $inputSpec.Description | Comment }}
+func (o *{{ $.Name | FormatName }}) With{{ $inputName | FormatName }}(ctx context.Context, value string) (*{{ $.Name | FormatName }}, error) {
+    o.{{ $inputName | FormatName }} = value
+    return o, nil
+}
+{{ end }}
+
+// Run executes the {{ $.Name }} action
+func (o *{{ $.Name | FormatName }}) Run(ctx context.Context) (*Directory, error) {
+    {{- range $inputName, $inputSpec := .Spec.Inputs }}
+    {{- if ne $inputSpec.Default "" }}
+    if o.{{ $inputName | FormatName }} == "" {
+        o.{{ $inputName | FormatName }} = "{{ $inputSpec.Default }}"
+    }
+    {{- end }}
+    {{- end }}
+
+    {{- range $inputName, $inputSpec := .Spec.Inputs }}
+    {{- if $inputSpec.Required }}
+    if o.{{ $inputName | FormatName }} == "" {
+        return nil, errors.New("missing required with{{ $inputName | FormatName }}")
+    }
+    {{- end }}
+    {{- end }}
+
+    return runAction(
+        ctx,
+        "{{ $.Uses }}",
+        o.Workdir,
+        map[string]string{
+            {{- range $inputName, $inputSpec := .Spec.Inputs }}
+            "{{ $inputName }}": o.{{ $inputName | FormatName }},
+            {{- end }}
+        },
+    )
+}

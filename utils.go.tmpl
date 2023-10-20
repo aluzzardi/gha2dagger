@@ -1,0 +1,47 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func runAction(ctx context.Context, uses string, workdir *Directory, with map[string]string) (*Directory, error) {
+	workflow := fmt.Sprintf(`
+on: [ pull_request ]
+
+jobs:
+  dagger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: action
+        uses: %s
+`, uses)
+
+	if len(with) > 0 {
+		workflow += "        with:\n"
+		for k, v := range with {
+			workflow += fmt.Sprintf("            %s: %q\n", k, v)
+		}
+	}
+
+	workdir = workdir.
+		WithNewFile(".workflows/dagger.yaml", workflow)
+
+	ctr, err := dag.Container().
+		From("ghcr.io/aweris/gale:v0.0.0-zenith").
+		WithEnvVariable("CACHE_BUSTER", time.Now().Format(time.RFC3339Nano)).
+		WithSecretVariable("GITHUB_TOKEN", dag.SetSecret("GITHUB_TOKEN", "github_pat_XXXX")).
+		WithDirectory("workdir", workdir).
+		WithWorkdir("workdir").
+		WithExec([]string{
+		    "run",
+    		"--workflows-dir", ".workflows",
+	    	".workflows/dagger.yaml",
+	    }, ContainerWithExecOpts{ExperimentalPrivilegedNesting: true}).
+        Sync(ctx)
+    if err != nil {
+        return nil, err
+    }
+    return ctr.Directory("."), nil
+}
